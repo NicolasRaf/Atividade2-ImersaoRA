@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v6.1.1/dist/aframe-extras.min.js"></script>
+</head>
+<body style="margin: 0; overflow: hidden;">
+    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; cameraParametersUrl: https://raw.githack.com/AR-js-org/AR.js/master/data/data/camera_para.dat;" raycaster="objects: .clickable">
+        
+        <a-marker preset="hiro">
+            <!-- PAI: Rotação orbital contínua para expor as faces do Cubo Mágico -->
+            <a-entity id="meu-pai">
+                <!-- FILHO: Modelo do Cubo Mágico (feito por mim para o projeto) com colisor invisível -->
+                <a-entity 
+                    id="meu-modelo"
+                    class="clickable"
+                    gltf-model="url(./Cubo_Imersao_AR.glb)" 
+                    scale="40 40 40" 
+                    position="0 0.5 0"
+                    rotation="-90 0 0"
+                    animation-mixer
+                    geometry="primitive: box; width: 0.3; height: 0.3; depth: 0.3;" 
+                    material="visible: false"> 
+                </a-entity>
+            </a-entity>
+        </a-marker>
+
+        <a-entity camera>
+            <a-cursor raycaster="objects: .clickable"></a-cursor>
+        </a-entity>
+    </a-scene>
+
+    <script>
+        // Elementos do cenário AR
+        const el = document.querySelector('#meu-modelo');
+        const pai = document.querySelector('#meu-pai');
+        const marker = document.querySelector('a-marker');
+
+        // Configurações de escala e interpolação (LERP)
+        const ESCALA_NORMAL = 40;
+        const ESCALA_AUMENTADA = 100;
+        let escalaAlvo = ESCALA_NORMAL;
+        let escalaAtual = ESCALA_NORMAL;
+        
+        // Controle de tempo para distinguir clique de segurar
+        let tempoInicioClique = 0;
+        const LIMITE_CLIQUE_RAPIDO_MS = 250;
+        
+        // Estado da animação de clique rápido
+        let cliqueGiroAtivo = false;
+        let cronometroGiro = 0;
+        const duracaoGiroMs = 600;
+        let anguloGiroClique = 0;
+        let bonusEscalaPulso = 0;
+
+        // Função de amortecimento elástico (efeito mola)
+        function easeOutBack(t) {
+            const c1 = 1.70158;
+            const c2 = c1 + 1;
+            return 1 + c2 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+        }
+
+        // --- INTERAÇÕES DE CLIQUE E PRECISÃO DE TOQUE ---
+        
+        el.addEventListener('mousedown', () => {
+            tempoInicioClique = Date.now();
+            escalaAlvo = ESCALA_AUMENTADA; // Aumenta escala no início do toque
+        });
+
+        el.addEventListener('mouseup', () => {
+            const duracaoPressionado = Date.now() - tempoInicioClique;
+            escalaAlvo = ESCALA_NORMAL; // Retorna para escala base
+
+            // Se for clique rápido, inicia giro elástico
+            if (duracaoPressionado < LIMITE_CLIQUE_RAPIDO_MS) {
+                cliqueGiroAtivo = true;
+                cronometroGiro = 0;
+            }
+        });
+
+        // --- LOOP DE ANIMAÇÃO PRINCIPAL ---
+        let tempoAnterior = performance.now();
+        let rotacaoContinuaY = 0;
+
+        function animar(tempoAtual) {
+            const deltaTime = tempoAtual - tempoAnterior;
+            tempoAnterior = tempoAtual;
+            const dt = Math.min(deltaTime, 100); // Evita saltos de renderização
+
+            // 1. Rotação tridimensional do pai (tumble de Cubo Mágico nos 3 eixos)
+            rotacaoContinuaY += 0.05 * dt;
+            const tempoSegundos = tempoAtual * 0.001;
+            const inclinacaoX = 22.5 + Math.sin(tempoSegundos * 0.8) * 12.5; // Inclina para mostrar topo
+            const balancoZ = Math.cos(tempoSegundos * 0.6) * 8;             // Leve balanço lateral
+            pai.setAttribute('rotation', `${inclinacaoX} ${rotacaoContinuaY} ${balancoZ}`);
+
+            // 2. Processamento da rotação e pulso de clique rápido
+            if (cliqueGiroAtivo) {
+                cronometroGiro += dt;
+                const progresso = Math.min(cronometroGiro / duracaoGiroMs, 1.0);
+
+                if (progresso >= 1.0) {
+                    cliqueGiroAtivo = false;
+                    anguloGiroClique = 0;
+                    bonusEscalaPulso = 0;
+                } else {
+                    anguloGiroClique = easeOutBack(progresso) * 360;  // Giro elástico
+                    bonusEscalaPulso = Math.sin(progresso * Math.PI) * 20; // Pulso de escala temporário
+                }
+            }
+
+            // 3. Interpolação de escala (LERP) e aplicação de rotações locais
+            escalaAtual += (escalaAlvo - escalaAtual) * 0.15;
+            const escalaFinal = escalaAtual + bonusEscalaPulso;
+            el.setAttribute('scale', `${escalaFinal} ${escalaFinal} ${escalaFinal}`);
+
+            // Mantém offset de -90 em X e aplica o giro do clique em Y
+            el.setAttribute('rotation', `-90 ${anguloGiroClique} 0`);
+
+            requestAnimationFrame(animar);
+        }
+
+        requestAnimationFrame(animar);
+
+        // --- DETECÇÃO DO MARCADOR ---
+        marker.addEventListener('markerFound', () => console.log('Hiro encontrado. Cubo pronto!'));
+        marker.addEventListener('markerLost', () => console.log('Marcador perdido.'));
+    </script>
+</body>
+</html>
