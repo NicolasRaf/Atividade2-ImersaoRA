@@ -1,3 +1,4 @@
 # Evita que o Git corrompa modelos 3D binarios no Windows alterando quebras de linha (CRLF)
 *.glb binary
 *.gltf binary
+*.bin binary
